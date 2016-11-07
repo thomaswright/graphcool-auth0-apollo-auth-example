@@ -157,7 +157,7 @@ const createUser = gql`
 `
 
 const signinUser = gql`
-  mutation createUser($authToken: String!){
+  mutation signinUser($authToken: String!){
     signinUser(
       auth0: {
         idToken: $authToken
