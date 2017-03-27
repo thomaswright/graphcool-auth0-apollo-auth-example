@@ -1,5 +1,5 @@
 import React, { Component, PropTypes } from 'react'
-import { Match, Miss, Redirect } from 'react-router'
+import { withRouter, Route, Redirect, Switch } from 'react-router-dom'
 import { graphql } from 'react-apollo';
 import gql from 'graphql-tag';
 import { isTokenExpired } from './jwtHelper'
@@ -17,26 +17,37 @@ import Auth0LoginPage from './Auth0LoginPage'
 
 /**___________________________________________________________________________*/
 
-const MatchWhenAuthorized = ({
-  component: Component,
-  isAuthorized,
-  componentProps,
-  ...other
-}) => (
-  <Match
-    {...other}
-    render={(props) => (
-      isAuthorized ?
-      <Component
-        {...props}
-        {...componentProps}/> :
-      <Redirect
-        to={{
-          pathname: '/signin',
-          state: { from: props.location }
-        }}/>
-    )}/>
-)
+// const MatchWhenAuthorized = ({
+//   component: Component,
+//   isAuthorized,
+//   componentProps,
+//   ...other
+// }) => (
+//   <Match
+//     {...other}
+//     render={(props) => (
+//       isAuthorized ?
+//       <Component
+//         {...props}
+//         {...componentProps}/> :
+//       <Redirect
+//         to={{
+//           pathname: '/signin',
+//           state: { from: props.location }
+//         }}/>
+//     )}/>
+// )
+
+const ProtectedRoute = ({ component: Component, isAuthorized, logout, ...rest }) => (
+  <Route
+    {...rest}
+    render={props => {
+      return isAuthorized
+        ? <Component logout={logout} />
+        : <Redirect to={`/signin`} />;
+    }}
+  />
+);
 
 /**___________________________________________________________________________*/
 
@@ -44,8 +55,10 @@ const USER_ALREADY_EXISTS_ERROR_CODE = 3023
 
 class AuthRouter extends Component {
   static propTypes = {
+    match: PropTypes.object.isRequired,
+    location: PropTypes.object.isRequired,
+    history: PropTypes.object.isRequired,
     client: PropTypes.object.isRequired,
-    router: PropTypes.object.isRequired,
     createUser: PropTypes.func.isRequired,
     signinUser: PropTypes.func.isRequired,
   }
@@ -57,6 +70,7 @@ class AuthRouter extends Component {
     }
   }
   logout = () => {
+    console.log("Logging out!");
     this.setState({
       auth0Token: null,
       graphcoolToken: null,
@@ -64,9 +78,11 @@ class AuthRouter extends Component {
     localStorage.removeItem(AUTH0_TOKEN_STORAGE_KEY)
     localStorage.removeItem(GRAPHCOOL_TOKEN_STORAGE_KEY)
     this.props.client.resetStore()
-    this.props.router.transitionTo('/signin')
+    // the push prop is passed from withRouter and corresponds to a history push
+    this.props.history.push('/signin')
   }
   onAuth0Login = (auth0Token, name) => {
+    console.log("Got the auth0 token");
     // set auth0 token in localstorage
     localStorage.setItem(AUTH0_TOKEN_STORAGE_KEY, auth0Token)
     // set to comp state to rerender
@@ -75,6 +91,7 @@ class AuthRouter extends Component {
     this.signinGraphcool(auth0Token, name)
   }
   signinGraphcool = async (auth0Token, name) => {
+    console.log("Signing into Graphcool");
     // create user if necessary
     try {
       await this.props.createUser({
@@ -101,8 +118,9 @@ class AuthRouter extends Component {
     // clear client store in case any session data from other users
     this.props.client.resetStore()
 
-    //  route to the home page
-    this.props.router.transitionTo('/')
+    // route to the home page
+    // the push prop is passed from withRouter and corresponds to a history push
+    this.props.history.push('/')
   }
   render() {
     /**
@@ -114,29 +132,29 @@ class AuthRouter extends Component {
          true -> we render the HomePage
     */
     return (
-      <div>
-        <MatchWhenAuthorized
-          exactly
-          pattern="/"
-          component={HomePage}
-          componentProps={{logout: this.logout}}
-          isAuthorized={(
-            this.state.auth0Token &&
-            this.state.graphcoolToken &&
-            !isTokenExpired(this.state.auth0Token)
-          )}
-          />
-        <Match
-          pattern="/signin"
-          render={(props) => (
+      <Switch >
+        <Route
+          path="/signin(/)?"
+          render={ _ => (
             <Auth0LoginPage
               clientId={CLIENT_ID}
               domain={DOMAIN}
               onAuth0Login={this.onAuth0Login}
               />
           )}/>
-        <Miss component={NoMatchPage} />
-      </div>
+          <ProtectedRoute
+            path="(/)?"
+            exact
+            component={HomePage}
+            logout={this.logout}
+            isAuthorized={(
+              this.state.auth0Token &&
+              this.state.graphcoolToken &&
+              !isTokenExpired(this.state.auth0Token)
+            )}
+          />
+        <Route component={NoMatchPage} />
+      </Switch>
     )
   }
 }
@@ -151,7 +169,8 @@ const createUser = gql`
       },
       name: $name
     ) {
-      id
+      id,
+      auth0UserId
     }
   }
 `
@@ -165,7 +184,8 @@ const signinUser = gql`
     ) {
       token
       user {
-        id
+        id,
+        auth0UserId
       }
     }
   }
@@ -175,4 +195,6 @@ const AuthRouterWithData =  graphql(createUser, {name: 'createUser'})(
   graphql(signinUser, {name: 'signinUser'})(AuthRouter)
 )
 
-export default AuthRouterWithData
+const AuthRouterWithDataAndRouter = withRouter(AuthRouterWithData)
+
+export default AuthRouterWithDataAndRouter

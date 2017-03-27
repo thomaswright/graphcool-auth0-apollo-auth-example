@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import ApolloClient, { createNetworkInterface } from 'apollo-client'
 import { ApolloProvider } from 'react-apollo'
-import { BrowserRouter } from 'react-router'
+import { BrowserRouter } from "react-router-dom";
 import AuthRouter from './AuthRouter'
 
 import {
@@ -31,14 +31,7 @@ class App extends Component {
     return (
       <ApolloProvider client={client}>
         <BrowserRouter>
-          {
-            ({ router }) => (
-              <AuthRouter
-                client={client}
-                router={router}
-                />
-            )
-          }
+          <AuthRouter client={client}/>
         </BrowserRouter>
       </ApolloProvider>
     );
